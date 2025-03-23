@@ -3,12 +3,14 @@ from repository.database import db
 from db_models.payment import Payment
 from datetime import datetime, timedelta
 from payments.pix import Pix
+from flask_socketio import SocketIO
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 app.config['SECRET_KEY'] = 'SECRET_KEY_WEBSOCKET'
 
 db.init_app(app)
+socketio = SocketIO(app)
 
 @app.route('/payments/pix', methods=['POST'])
 def create_payment_pix():
@@ -39,6 +41,22 @@ def get_image(file_name):
 
 @app.route('/payments/pix/confirmation', methods=['POST'])
 def pix_confirmation():
+  data = request.get_json()
+
+  #validations
+  if "bank_payment_id" not in data and "value" not in data:
+    return jsonify({"message": "Invalid payment data"}), 400
+  
+  payment = Payment.query.filter_by(bank_payment_id=data.get("bank_payment_id")).first()
+
+  if not payment or payment.paid:
+    return jsonify({"message": "Payment not found"}), 400
+  
+  if data.get("value") != payment.value:
+    return jsonify({"message": "Invalid payment data"}), 404
+  
+  payment.paid = True
+  db.session.commit()
   return jsonify({"message": "The payment has been confirmed"})
 
 @app.route('/payments/pix/<int:payment_id>', methods=['GET'])
@@ -52,6 +70,12 @@ def payment_pix_page(payment_id):
                            qr_code=payment.qr_code,
                            )
 
+# websockets
+@socketio.on('connect')
+def handle_connect():
+  print("Client connected to the server")
+
 if __name__ == '__main__':
-  app.run(debug=True)
+  # app.run(debug=True)
+  socketio.run(app, debug=True)
 
