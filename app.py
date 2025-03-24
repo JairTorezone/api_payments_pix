@@ -10,7 +10,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 app.config['SECRET_KEY'] = 'SECRET_KEY_WEBSOCKET'
 
 db.init_app(app)
-socketio = SocketIO(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 @app.route('/payments/pix', methods=['POST'])
 def create_payment_pix():
@@ -57,11 +57,17 @@ def pix_confirmation():
   
   payment.paid = True
   db.session.commit()
+  socketio.emit(f'payment-confirmed-{payment.id}')
   return jsonify({"message": "The payment has been confirmed"})
 
 @app.route('/payments/pix/<int:payment_id>', methods=['GET'])
 def payment_pix_page(payment_id):
   payment = Payment.query.get(payment_id)
+
+  if payment.paid:
+    return render_template('confirmed_payment.html',
+                           payment_id=payment_id,
+                           value=payment.value)
 
   return render_template('payment.html',
                            payment_id=payment.id,
